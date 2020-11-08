@@ -18,7 +18,7 @@ sys.modules['wiiuse'] = wiiuse
 exec(code, wiiuse.__dict__)
 
 try:
-	from talon import ctrl, screen
+	from talon import Module, ctrl, screen
 	usingTalon = True
 	moveMouse = ctrl.mouse_move
 	W = screen.main_screen().rect.width
@@ -191,7 +191,7 @@ class WiiMouse:
 
 		self.mode = self.MOUSING
 
-	def recenter():
+	def recenter(self):
 		if self.mode != self.MOUSING:
 			print("can only recenter in mouse mode")
 			return
@@ -223,10 +223,27 @@ class WiiMouse:
 wm = WiiMouse()
 
 if usingTalon:
-	def initMouse():
-		wm.connect()
-		wm.calibrate()
-	threading.Thread(target = initMouse, daemon = True).start()
+	mod = Module()
+
+	@mod.action_class
+	class Actions:
+
+		def wii_connect():
+			"""connect to the WiiHeadMouse"""
+			threading.Thread(target = wm.connect, daemon = True).start()
+
+		def wii_disconnect():
+			"""disconnect from the WiiHeadMouse"""
+			wm.disconnect()
+
+		def wii_calibrate():
+			"""calibrate the WiiHeadMouse"""
+			threading.Thread(target = wm.calibrate, daemon = True).start()
+
+		def wii_recenter():
+			"""recenter the WiiHeadMouse"""
+			threading.Thread(target = wm.recenter, daemon = True).start()
+
 else:
 	wm.connect()
 	wm.calibrate()
