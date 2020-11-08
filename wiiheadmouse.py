@@ -1,4 +1,6 @@
 
+SCROLL_MULTIPLIER = 1
+
 import sys
 import time
 import os
@@ -21,6 +23,8 @@ try:
 	from talon import Module, ctrl, screen
 	usingTalon = True
 	moveMouse = ctrl.mouse_move
+	def scrollMouse(y):
+		ctrl.mouse_scroll(y, 0)
 	W = screen.main_screen().rect.width
 	H = screen.main_screen().rect.height
 except:
@@ -29,6 +33,8 @@ except:
 	mouse = Controller()
 	def moveMouse(x, y):
 		mouse.position = (x, y)
+	def scrollMouse(y):
+		mouse.scroll(0, y)
 	moveMouse(30000, 30000)
 	W, H = mouse.position
 
@@ -60,8 +66,9 @@ class WiiMouse:
 	DISCONNECTED = 0
 	INACTIVE = 1
 	MOUSING = 2
-	CALIBRATING = 3
-	QUIT = 4
+	SCROLLING = 3
+	CALIBRATING = 4
+	QUIT = 5
 
 	def connect(self):
 		while self.mode == self.DISCONNECTED:
@@ -112,63 +119,88 @@ class WiiMouse:
 			r = wiiuse.poll(self.wiimotes, 1)
 			if r != 0:
 				wm = self.wiimotes[0][0]
-				if self.mode == self.MOUSING or self.mode == self.CALIBRATING:
-					x, y = 0, 0
-					n = 0
-					for i in range(4):
-						if wm.ir.dot[i].visible:
-							x += wm.ir.dot[i].x
-							y += wm.ir.dot[i].y
-							n += 1
 
-					if n > 0:
-						self.seeIR = True
-						self.cursorMsr = (x/n, y/n)
-					else:
-						self.seeIR = False
+				x, y = 0, 0
+				n = 0
+				for i in range(4):
+					if wm.ir.dot[i].visible:
+						x += wm.ir.dot[i].x
+						y += wm.ir.dot[i].y
+						n += 1
+
+				if n > 0:
+					self.seeIR = True
+					self.cursorMsr = (x/n, y/n)
+				else:
+					self.seeIR = False
 
 	def smoothen(self):
 		while not self.mode == self.QUIT:
-			if self.mode == self.MOUSING:
-				d = math.sqrt(
-					(self.cursorMsr[0] - self.cursorSmooth[0])**2 +
-					(self.cursorMsr[1] - self.cursorSmooth[1])**2
-				)
-
-				# or smoothing when the cursor doesn't move as much
-				drag = 0.997 / ((d/80)**2 + 1)
-
-				self.cursorSmooth = (
-					drag*self.cursorSmooth[0] + (1-drag)*self.cursorMsr[0],
-					drag*self.cursorSmooth[1] + (1-drag)*self.cursorMsr[1]
-				)
-				time.sleep(0.004)
-			else:
+			if self.mode == self.DISCONNECTED:
 				time.sleep(0.1)
+				continue
+
+			d = math.sqrt(
+				(self.cursorMsr[0] - self.cursorSmooth[0])**2 +
+				(self.cursorMsr[1] - self.cursorSmooth[1])**2
+			)
+
+			# or smoothing when the cursor doesn't move as much
+			drag = 0.997 / ((d/80)**2 + 1)
+
+			self.cursorSmooth = (
+				drag*self.cursorSmooth[0] + (1-drag)*self.cursorMsr[0],
+				drag*self.cursorSmooth[1] + (1-drag)*self.cursorMsr[1]
+			)
+			time.sleep(0.004)
 
 	def controlMouse(self):
 		while not self.mode == self.QUIT:
 			if self.mode == self.MOUSING:
 				moveMouse(
 					lerp(
-						self.caliPt1[0],
-						self.caliPt2[0],
-						50,
-						W-50,
+						self.caliPt1[0], self.caliPt2[0],
+						50, W-50,
 						self.cursorSmooth[0]
 					) - self.offset[0],
 					lerp(
-						self.caliPt1[1],
-						self.caliPt2[1],
-						50,
-						W-50,
+						self.caliPt1[1], self.caliPt2[1],
+						50, W-50,
 						self.cursorSmooth[1]
 					) - self.offset[1]
 				)
 				time.sleep(0.016)
+			elif self.mode == self.SCROLLING:
+				d = self.cursorSmooth[1] - self.scrollStart[1]
+				dir = 1 if d >= 0 else -1
+				if abs(d) > 50:
+					speed = ((abs(d) - 50)/20)**1.7 * SCROLL_MULTIPLIER
+					interval = 1/speed
+					step = 1
+					while interval < 0.1:
+						step += 1
+						interval = step/speed
+					if interval > 0.5:
+						interval = 0.5
+					scrollMouse(dir * step)
+					time.sleep(interval)
+				else:
+					time.sleep(0.1)
 			else:
 				time.sleep(0.1)
 
+	def startScrolling(self):
+		if self.mode == self.MOUSING:
+			self.mode = self.SCROLLING
+			self.scrollStart = self.cursorSmooth
+		else:
+			print("can only scroll in mouse mode")
+
+	def stopScrolling(self):
+		if self.mode == self.SCROLLING:
+			self.mode = self.MOUSING
+		else:
+			print("wasn't scrolling")
 
 	def calibrate(self):
 		if self.mode != self.MOUSING:
@@ -210,6 +242,7 @@ class WiiMouse:
 		self.wiimotes = wiiuse.init(1)
 		self.cursorMsr = (1024/2, 768/2)
 		self.cursorSmooth = self.cursorMsr
+		self.scrollStart = self.cursorMsr
 		self.caliPt1 = (100, 100)
 		self.caliPt2 = (1024-100, 768-100)
 		self.offset = (0, 0)
@@ -243,6 +276,14 @@ if usingTalon:
 		def wii_recenter():
 			"""recenter the WiiHeadMouse"""
 			threading.Thread(target = wm.recenter, daemon = True).start()
+
+		def wii_start_scrolling():
+			"""start scrolling"""
+			wm.startScrolling()
+
+		def wii_stop_scrolling():
+			"""stop scrolling"""
+			wm.stopScrolling()
 
 else:
 	wm.connect()
