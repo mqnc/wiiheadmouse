@@ -1,5 +1,6 @@
 
-SCROLL_MULTIPLIER = 1
+SCROLL_FACTOR = 0.4
+SCROLL_MODE = 'touchpad' # joystick or touchpad
 
 import sys
 import time
@@ -171,28 +172,45 @@ class WiiMouse:
 				)
 				time.sleep(0.016)
 			elif self.mode == self.SCROLLING:
-				d = self.cursorSmooth[1] - self.scrollStart[1]
-				dir = 1 if d >= 0 else -1
-				if abs(d) > 50:
-					speed = ((abs(d) - 50)/20)**1.7 * SCROLL_MULTIPLIER
-					interval = 1/speed
-					step = 1
-					while interval < 0.1:
-						step += 1
-						interval = step/speed
-					if interval > 0.5:
-						interval = 0.5
-					scrollMouse(dir * step)
-					time.sleep(interval)
+				if SCROLL_MODE == 'joystick':
+					d = self.cursorSmooth[1] - self.scrollStart[1]
+					dir = 1 if d >= 0 else -1
+					if abs(d) > 50:
+						speed = ((abs(d) - 50)/20)**1.7 * SCROLL_FACTOR
+						interval = 1/speed
+						step = 1
+						while interval < 0.1:
+							step += 1
+							interval = step/speed
+						if interval > 0.5:
+							interval = 0.5
+						scrollMouse(dir * step)
+						time.sleep(interval)
+					else:
+						time.sleep(0.1)
+				elif SCROLL_MODE == 'touchpad':
+					d = self.cursorSmooth[1] - self.scrollStart[1]
+					desiredPosition = round(d * SCROLL_FACTOR)
+					scrollMouse(desiredPosition - self.scrollPosition)
+					self.scrollPosition = desiredPosition
+					time.sleep(0.1)
 				else:
 					time.sleep(0.1)
 			else:
 				time.sleep(0.1)
 
+	def stutter(self):
+		before = self.mode
+		self.mode = self.INACTIVE
+		time.sleep(0.3)
+		if self.mode == self.INACTIVE:
+			self.mode = before
+
 	def startScrolling(self):
 		if self.mode == self.MOUSING:
 			self.mode = self.SCROLLING
 			self.scrollStart = self.cursorSmooth
+			self.scrollPosition = 0
 		else:
 			print("can only scroll in mouse mode")
 
@@ -243,6 +261,7 @@ class WiiMouse:
 		self.cursorMsr = (1024/2, 768/2)
 		self.cursorSmooth = self.cursorMsr
 		self.scrollStart = self.cursorMsr
+		self.scrollPosition = 0
 		self.caliPt1 = (100, 100)
 		self.caliPt2 = (1024-100, 768-100)
 		self.offset = (0, 0)
@@ -284,6 +303,10 @@ if usingTalon:
 		def wii_stop_scrolling():
 			"""stop scrolling"""
 			wm.stopScrolling()
+
+		def wii_stutter():
+			"""don't move for 0.1 seconds"""
+			wm.stutter()
 
 else:
 	wm.connect()
