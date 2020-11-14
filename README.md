@@ -28,7 +28,13 @@ Otherwise you need to install pynput.
 
 **"wii recenter"** - and then staring in the middle of the screen recenters the cursor without measuring the screen again.
 
-**"wii scroll"** - start scrolling mode: Move your head up and down to stroll up and down. This was tuned for Ubuntu, you might want to adjust SCROLL_MULTIPLIER in wiiheadmouse.py. 
+**"wii fine"** - refine the mouse position around its current location
+
+**"wii coarse"** - stop fine mode
+
+**"wii scroll"** - start scrolling mode: Move your head up and down to stroll up and down. This was tuned for Ubuntu, you might want to adjust SCROLL_MULTIPLIER in wiiheadmouse.py. You can also change SCROLL_MODE between joystick and touchpad. Joystick means you control the scrolling speed, touchpad means you control the scrolling position.
+
+**"wii stop"** - stop scrolling mode
 
 ## Stand Alone Usage
 Just execute wiiheadmouse.py. A calibration will be performed (follow the cursor with your face facing direction) and then you can control the cursor with your head.

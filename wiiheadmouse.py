@@ -67,9 +67,10 @@ class WiiMouse:
 	DISCONNECTED = 0
 	INACTIVE = 1
 	MOUSING = 2
-	SCROLLING = 3
-	CALIBRATING = 4
-	QUIT = 5
+	FINE_MOUSING = 3
+	SCROLLING = 4
+	CALIBRATING = 5
+	QUIT = 6
 
 	def connect(self):
 		while self.mode == self.DISCONNECTED:
@@ -155,21 +156,30 @@ class WiiMouse:
 			)
 			time.sleep(0.004)
 
+	def project(self, xy):
+		return (
+			lerp(
+				self.caliPt1[0], self.caliPt2[0],
+				50, W-50,
+				xy[0]
+			) - self.offset[0],
+			lerp(
+				self.caliPt1[1], self.caliPt2[1],
+				50, W-50,
+				xy[1]
+			) - self.offset[1]
+		)
+
 	def controlMouse(self):
 		while not self.mode == self.QUIT:
-			if self.mode == self.MOUSING:
-				moveMouse(
-					lerp(
-						self.caliPt1[0], self.caliPt2[0],
-						50, W-50,
-						self.cursorSmooth[0]
-					) - self.offset[0],
-					lerp(
-						self.caliPt1[1], self.caliPt2[1],
-						50, W-50,
-						self.cursorSmooth[1]
-					) - self.offset[1]
-				)
+			if self.mode == self.MOUSING or self.mode == self.FINE_MOUSING:
+				targetX, targetY = self.project(self.cursorSmooth)
+
+				if self.mode == self.FINE_MOUSING:
+					targetX = self.focus[0] + 0.2 * (targetX - self.focus[0])
+					targetY = self.focus[1] + 0.2 * (targetY - self.focus[1])
+				moveMouse(targetX, targetY)
+
 				time.sleep(0.016)
 			elif self.mode == self.SCROLLING:
 				if SCROLL_MODE == 'joystick':
@@ -205,6 +215,19 @@ class WiiMouse:
 		time.sleep(0.3)
 		if self.mode == self.INACTIVE:
 			self.mode = before
+
+	def startFine(self):
+		if self.mode == self.MOUSING:
+			self.mode = self.FINE_MOUSING
+			self.focus = self.project(self.cursorSmooth)
+		else:
+			print("can only fine mouse in mouse mode")
+
+	def stopFine(self):
+		if self.mode == self.FINE_MOUSING:
+			self.mode = self.MOUSING
+		else:
+			print("wasn't fine mousing")
 
 	def startScrolling(self):
 		if self.mode == self.MOUSING:
@@ -259,8 +282,9 @@ class WiiMouse:
 		self.mode = self.DISCONNECTED
 		self.wiimotes = wiiuse.init(1)
 		self.cursorMsr = (1024/2, 768/2)
-		self.cursorSmooth = self.cursorMsr
-		self.scrollStart = self.cursorMsr
+		self.cursorSmooth = (1024/2, 768/2)
+		self.scrollStart = (1024/2, 768/2)
+		self.focus = (1024/2, 768/2)
 		self.scrollPosition = 0
 		self.caliPt1 = (100, 100)
 		self.caliPt2 = (1024-100, 768-100)
@@ -295,6 +319,14 @@ if usingTalon:
 		def wii_recenter():
 			"""recenter the WiiHeadMouse"""
 			threading.Thread(target = wm.recenter, daemon = True).start()
+
+		def wii_start_fine():
+			"""fine motion"""
+			wm.startFine()
+
+		def wii_stop_fine():
+			"""stop fine motion"""
+			wm.stopFine()
 
 		def wii_start_scrolling():
 			"""start scrolling"""
