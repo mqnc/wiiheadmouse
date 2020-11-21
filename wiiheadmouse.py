@@ -131,10 +131,8 @@ class WiiMouse:
 						n += 1
 
 				if n > 0:
-					self.seeIR = True
+					self.lastIR = time.time()
 					self.cursorMsr = (x/n, y/n)
-				else:
-					self.seeIR = False
 
 	def smoothen(self):
 		while not self.mode == self.QUIT:
@@ -172,6 +170,10 @@ class WiiMouse:
 
 	def controlMouse(self):
 		while not self.mode == self.QUIT:
+			if time.time() > self.lastIR + 0.1:
+				time.sleep(0.1)
+				continue
+
 			if self.mode == self.MOUSING or self.mode == self.FINE_MOUSING:
 				targetX, targetY = self.project(self.cursorSmooth)
 
@@ -212,7 +214,7 @@ class WiiMouse:
 	def stutter(self):
 		before = self.mode
 		self.mode = self.INACTIVE
-		time.sleep(0.3)
+		time.sleep(0.2)
 		if self.mode == self.INACTIVE:
 			self.mode = before
 
@@ -289,7 +291,7 @@ class WiiMouse:
 		self.caliPt1 = (100, 100)
 		self.caliPt2 = (1024-100, 768-100)
 		self.offset = (0, 0)
-		self.seeIR = False
+		self.lastIR = 0
 
 		threading.Thread(target = self.watchdog, daemon = True).start()
 		threading.Thread(target = self.poller, daemon = True).start()
@@ -337,8 +339,8 @@ if usingTalon:
 			wm.stopScrolling()
 
 		def wii_stutter():
-			"""don't move for 0.1 seconds"""
-			wm.stutter()
+			"""don't move for a moment"""
+			threading.Thread(target = wm.stutter, daemon = True).start()
 
 else:
 	wm.connect()
