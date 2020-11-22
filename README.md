@@ -9,7 +9,7 @@ BE PREPARED THAT TALON MIGHT CRASH OR YOUR MOUSE GETS STUCK AND YOU HAVE TO KILL
 That being said, I am already using it and it works fine for me.
 
 ## Hardware Installation
-You need a WiiMote connected to your head (I use a bike helmet) and an infrared LED or the sensor bar above or under your screen.
+You need a WiiMote connected to your head (~~I use a bike helmet~~ now I have attached it to the headband of my headphones) and an infrared LED or the sensor bar above or under your screen.
 
 ## Software Installation
 Install wiiuse from here: https://github.com/wiiuse/wiiuse
