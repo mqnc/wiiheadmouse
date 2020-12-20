@@ -1,5 +1,8 @@
 
-SCROLL_FACTOR = 0.4
+
+UDP_IP = "127.0.0.1"
+UDP_PORT = 7711
+SCROLL_FACTOR = -0.4
 SCROLL_MODE = 'touchpad' # joystick or touchpad
 
 import sys
@@ -7,44 +10,34 @@ import time
 import os
 import threading
 import math
+import socket
+import traceback
 
-# import wiiuse from a file
-path = os.path.join(
-	os.path.dirname(os.path.abspath(__file__)),
-	'pywiiuse.py_'
-)
-with open(path) as file:
-	code = file.read()
-from types import ModuleType
-wiiuse = ModuleType('wiiuse')
-sys.modules['wiiuse'] = wiiuse
-exec(code, wiiuse.__dict__)
+from pynput.mouse import Controller, Button
+import pywiiuse as wiiuse
 
-try:
-	from talon import Module, ctrl, screen
-	usingTalon = True
-	moveMouse = ctrl.mouse_move
-	def scrollMouse(y):
-		ctrl.mouse_scroll(y, 0)
-	W = screen.main_screen().rect.width
-	H = screen.main_screen().rect.height
-except:
-	from pynput.mouse import Controller
-	usingTalon = False
-	mouse = Controller()
-	def moveMouse(x, y):
-		mouse.position = (x, y)
-	def scrollMouse(y):
-		mouse.scroll(0, y)
-	moveMouse(30000, 30000)
-	W, H = mouse.position
-
-moveMouse(W/2, H/2)
-
+mouse = Controller()
+def moveMouse(x, y):
+	mouse.position = (x, y)
+def scrollMouse(y):
+	mouse.scroll(0, y)
+moveMouse(30000, 30000)
+W, H = mouse.position
+def leftPress():
+	mouse.press(Button.left)
+def leftRelease():
+	mouse.release(Button.left)
+def rightPress():
+	mouse.press(Button.right)
+def rightRelease():
+	mouse.release(Button.right)
+def middlePress():
+	mouse.press(Button.middle)
+def middleRelease():
+	mouse.release(Button.middle)
 
 def lerp(x0, x1, y0, y1, x):
 	return (x-x0)/(x1-x0) * (y1-y0) + y0
-
 
 def line(x0, y0, x1, y1):
 	q = 0
@@ -99,6 +92,7 @@ class WiiMouse:
 	def disconnect(self):
 		self.mode = self.DISCONNECTED
 		wiiuse.disconnect(self.wiimotes[0])
+		#wiiuse.cleanup(self.wiimotes, 1)
 
 	def quit(self):
 		print("quitting...")
@@ -231,19 +225,25 @@ class WiiMouse:
 		else:
 			print("wasn't fine mousing")
 
-	def startScrolling(self):
-		if self.mode == self.MOUSING:
+	def mouse(self):
+		if self.mode == self.SCROLLING or self.mode == self.INACTIVE:
+			self.mode = self.MOUSING
+		else:
+			print("not in scroll mode or sleep mode")
+
+	def scroll(self):
+		if self.mode == self.MOUSING or self.mode == self.INACTIVE:
 			self.mode = self.SCROLLING
 			self.scrollStart = self.cursorSmooth
 			self.scrollPosition = 0
 		else:
-			print("can only scroll in mouse mode")
+			print("not in mouse mode or sleep mode")
 
-	def stopScrolling(self):
-		if self.mode == self.SCROLLING:
-			self.mode = self.MOUSING
+	def sleep(self):
+		if self.mode == self.MOUSING or self.mode == self.SCROLLING:
+			self.mode = self.INACTIVE
 		else:
-			print("wasn't scrolling")
+			print("not in mouse mode or scroll mode")
 
 	def calibrate(self):
 		if self.mode != self.MOUSING:
@@ -298,52 +298,64 @@ class WiiMouse:
 		threading.Thread(target = self.smoothen, daemon = True).start()
 		threading.Thread(target = self.controlMouse, daemon = True).start()
 
+moveMouse(W/2, H/2)
 wm = WiiMouse()
+wm.connect()
 
-if usingTalon:
-	mod = Module()
+api = {
+	"CONNECT": wm.connect,
+	"DISCONNECT": wm.disconnect,
+	"CALIBRATE": wm.calibrate,
+	"RECENTER": wm.recenter,
+	"START_FINE": wm.startFine,
+	"STOP_FINE": wm.stopFine,
+	"MOUSE": wm.mouse,
+	"SCROLL": wm.scroll,
+	"SLEEP": wm.sleep,
+	"STUTTER": wm.stutter,
+}
 
-	@mod.action_class
-	class Actions:
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
 
-		def wii_connect():
-			"""connect to the WiiHeadMouse"""
-			threading.Thread(target = wm.connect, daemon = True).start()
+def stutterLeftPress():
+	wm.stutter()
+	leftPress()
+def stutterRightPress():
+	wm.stutter()
+	rightPress()
+def stutterMiddlePress():
+	wm.stutter()
+	middlePress()
+def doubleClick():
+	wm.stutter()
+	leftPress()
+	time.sleep(0.01)
+	leftRelease()
+	time.sleep(0.01)
+	leftPress()
+	time.sleep(0.01)
+	leftRelease()
 
-		def wii_disconnect():
-			"""disconnect from the WiiHeadMouse"""
-			wm.disconnect()
+try:
+	import footpedals as fp
+	ped = fp.PedalManager()
+	ped.register(fp.LEFT + fp.PRESS, stutterLeftPress)
+	ped.register(fp.LEFT + fp.RELEASE, leftRelease)
+	ped.register(fp.RIGHT + fp.PRESS, stutterRightPress)
+	ped.register(fp.RIGHT + fp.RELEASE, rightRelease)
+	ped.register(fp.MIDDLE + fp.PRESS, stutterMiddlePress)
+	ped.register(fp.MIDDLE + fp.RELEASE, middleRelease)
+	ped.register(fp.FINE + fp.PRESS, wm.startFine)
+	ped.register(fp.FINE + fp.RELEASE, wm.stopFine)
+	ped.register(fp.SCROLL + fp.PRESS, wm.scroll)
+	ped.register(fp.SCROLL + fp.RELEASE, wm.mouse)
+	ped.register(fp.DOUBLE + fp.PRESS, doubleClick)
+except:
+	traceback.print_exc()
 
-		def wii_calibrate():
-			"""calibrate the WiiHeadMouse"""
-			threading.Thread(target = wm.calibrate, daemon = True).start()
-
-		def wii_recenter():
-			"""recenter the WiiHeadMouse"""
-			threading.Thread(target = wm.recenter, daemon = True).start()
-
-		def wii_start_fine():
-			"""fine motion"""
-			wm.startFine()
-
-		def wii_stop_fine():
-			"""stop fine motion"""
-			wm.stopFine()
-
-		def wii_start_scrolling():
-			"""start scrolling"""
-			wm.startScrolling()
-
-		def wii_stop_scrolling():
-			"""stop scrolling"""
-			wm.stopScrolling()
-
-		def wii_stutter():
-			"""don't move for a moment"""
-			threading.Thread(target = wm.stutter, daemon = True).start()
-
-else:
-	wm.connect()
-	wm.calibrate()
-	while True:
-		time.sleep(1)
+while True:
+	data, addr = sock.recvfrom(1024)
+	msg = data.decode("ascii")
+	if msg in api:
+		api[msg]()

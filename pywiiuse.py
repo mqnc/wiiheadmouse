@@ -1,5 +1,4 @@
 # https://github.com/tswast/pywiiuse/blob/master/wiiuse/__init__.py
-# this is not a py file so talon ignores it
 
 '''Python interface to the wiiuse library for the wii remote
 
@@ -10,6 +9,8 @@ This software is free for any use. If you or your lawyer are stupid enough to be
 liability for it, then don't use it; otherwise, be my guest.
 
 Gary Bishop, January 2008
+
+modded to support cleanup by mqnc
 '''
 
 import os
@@ -273,6 +274,7 @@ class api(Structure):
                 ('find', CFUNCTYPE(c_int, wiimote_pp, c_int, c_int)),
                 ('connect', CFUNCTYPE(c_int, wiimote_pp, c_int)),
                 ('disconnect', CFUNCTYPE(None, wiimote_p)),
+                ('cleanup', CFUNCTYPE(None, wiimote_pp, c_int)),
                 ('poll', CFUNCTYPE(None, wiimote_pp, c_int)),
                 ]
 
@@ -348,6 +350,7 @@ rumble = None
 status = None
 poll = None
 disconnect = None
+cleanup = None
 motion_sensing = None
 set_ir = None
 toggle_rumble = None
@@ -376,7 +379,7 @@ def init(nwiimotes):
     # wapi = wiiuse_api[0]
 
     # initialize our other function pointers
-    global find, connect, set_leds, rumble, status, poll, disconnect, motion_sensing
+    global find, connect, set_leds, rumble, status, poll, disconnect, cleanup, motion_sensing
     global set_ir, toggle_rumble, set_ir_vres, set_ir_position, set_aspect_ratio
     global set_orient_threshold, set_flags
     find = dll.wiiuse_find
@@ -386,6 +389,7 @@ def init(nwiimotes):
     status = dll.wiiuse_status
     poll = dll.wiiuse_poll
     disconnect = dll.wiiuse_disconnect
+    cleanup = dll.wiiuse_cleanup
     motion_sensing = dll.wiiuse_motion_sensing
     set_ir = dll.wiiuse_set_ir
     toggle_rumble = dll.wiiuse_toggle_rumble
